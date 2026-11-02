@@ -1,14 +1,12 @@
 import type { RoleDefinition } from '../config/roles';
 
 export type GameStatus = 'SETUP' | 'READY' | 'DEALT' | 'FINISHED';
-export type HostMode = 'GOD_ONLY' | 'PLAYER_AND_GOD';
 export type PlayerStatus = 'ALIVE' | 'DEAD' | 'VOTED_OUT';
 
 export interface SeatState {
   seatNumber: number;
   peerId: string | null;
   playerName: string;
-  isHost: boolean;
   roleId: string | null;
   status: PlayerStatus;
   tags: string[];
@@ -17,7 +15,8 @@ export interface SeatState {
 export interface RoomState {
   roomId: string;
   gameStatus: GameStatus;
-  hostMode: HostMode;
+  godPeerId: string | null;
+  godName: string;
   totalSeats: number;
   selectedRoleIds: string[];
   seats: SeatState[];
@@ -31,10 +30,18 @@ export type PublicRoomState = Omit<RoomState, 'seats'> & {
 export type ClientMessage =
   | { type: 'JOIN'; playerName: string }
   | { type: 'SELECT_SEAT'; targetSeat: number }
-  | { type: 'LEAVE_SEAT' };
+  | { type: 'CLAIM_GOD' }
+  | { type: 'LEAVE_GOD' }
+  | { type: 'CHANGE_ROLE_COUNT'; roleId: string; delta: number }
+  | { type: 'SWAP_SEATS'; seatA: number; seatB: number }
+  | { type: 'DEAL_CARDS' }
+  | { type: 'SET_PLAYER_STATUS'; seatNumber: number; status: PlayerStatus }
+  | { type: 'TOGGLE_TAG'; seatNumber: number; tag: string }
+  | { type: 'RESET_GAME' };
 
 export type HostMessage =
   | { type: 'SYNC_ROOM_STATE'; room: PublicRoomState }
+  | { type: 'SYNC_GOD_STATE'; room: RoomState }
   | { type: 'ASSIGN_ROLE'; role: RoleDefinition }
   | { type: 'RESET_GAME' }
   | { type: 'NOTICE'; message: string };
@@ -42,4 +49,9 @@ export type HostMessage =
 export interface JoinInfo {
   roomId: string;
   playerName: string;
+}
+
+export interface CreateInfo {
+  playerName: string;
+  selectedRoleIds: string[];
 }

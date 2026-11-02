@@ -1,42 +1,30 @@
 import { useState } from 'react';
-import { GodDashboard } from './components/GodDashboard';
-import { HostSetup } from './components/HostSetup';
 import { Landing } from './components/Landing';
-import { PlayerView } from './components/PlayerView';
+import { RoomView } from './components/RoomView';
+import { ROLE_REGISTRY } from './config/roles';
 import { usePeerClient } from './hooks/usePeerClient';
 import { usePeerHost } from './hooks/usePeerHost';
-import type { JoinInfo } from './types/protocol';
+import type { CreateInfo, JoinInfo } from './types/protocol';
+import { HOST_PEER_ID } from './utils/game';
 
-type Session = { type: 'HOST' } | { type: 'CLIENT'; joinInfo: JoinInfo } | null;
+type Session = { type: 'HOST'; createInfo: CreateInfo } | { type: 'CLIENT'; joinInfo: JoinInfo } | null;
 
-function HostRoom({ onExit }: { onExit: () => void }) {
-  const host = usePeerHost();
-  if (host.room.gameStatus === 'DEALT' || host.room.gameStatus === 'FINISHED') {
-    return (
-      <GodDashboard
-        room={host.room}
-        connectionCount={host.connectionCount}
-        notice={host.notice}
-        onNoticeClose={() => host.setNotice('')}
-        onSetPlayerStatus={host.setPlayerStatus}
-        onToggleTag={host.toggleTag}
-        onResetGame={host.resetGame}
-        onExit={onExit}
-      />
-    );
-  }
+function HostRoom({ createInfo, onExit }: { createInfo: CreateInfo; onExit: () => void }) {
+  const host = usePeerHost(createInfo);
+  const hostSeat = host.room.seats.find((seat) => seat.peerId === HOST_PEER_ID);
+  const myRole = hostSeat?.roleId ? ROLE_REGISTRY[hostSeat.roleId] : null;
   return (
-    <HostSetup
-      room={host.room}
-      connectionState={host.connectionState}
-      connectionCount={host.connectionCount}
+    <RoomView
+      room={host.publicRoom}
+      godRoom={host.room}
+      myPeerId={HOST_PEER_ID}
+      myName={createInfo.playerName}
+      myRole={myRole}
+      connectionLabel={host.connectionState === 'OPEN' ? `${host.connectionCount} 台设备` : '连接中'}
       error={host.error}
       notice={host.notice}
       onNoticeClose={() => host.setNotice('')}
-      onChangeHostMode={host.changeHostMode}
-      onChangeRoleCount={host.changeRoleCount}
-      onSwapSeats={host.swapSeats}
-      onDealCards={host.dealCards}
+      onSend={host.send}
       onExit={onExit}
     />
   );
@@ -45,17 +33,17 @@ function HostRoom({ onExit }: { onExit: () => void }) {
 function ClientRoom({ joinInfo, onExit }: { joinInfo: JoinInfo; onExit: () => void }) {
   const client = usePeerClient(joinInfo);
   return (
-    <PlayerView
-      joinInfo={joinInfo}
+    <RoomView
       room={client.room}
-      role={client.role}
-      peerId={client.peerId}
-      connectionState={client.connectionState}
+      godRoom={client.godRoom}
+      myPeerId={client.peerId}
+      myName={joinInfo.playerName}
+      myRole={client.role}
+      connectionLabel={client.connectionState === 'CONNECTED' ? '已连接' : '未连接'}
       error={client.error}
       notice={client.notice}
       onNoticeClose={() => client.setNotice('')}
-      onSelectSeat={client.selectSeat}
-      onLeaveSeat={client.leaveSeat}
+      onSend={client.send}
       onExit={onExit}
     />
   );
@@ -72,12 +60,12 @@ export default function App() {
     window.history.replaceState(null, '', url);
   };
 
-  if (session?.type === 'HOST') return <HostRoom onExit={exitRoom} />;
+  if (session?.type === 'HOST') return <HostRoom createInfo={session.createInfo} onExit={exitRoom} />;
   if (session?.type === 'CLIENT') return <ClientRoom joinInfo={session.joinInfo} onExit={exitRoom} />;
   return (
     <Landing
       initialRoomId={initialRoomId}
-      onCreate={() => setSession({ type: 'HOST' })}
+      onCreate={(createInfo) => setSession({ type: 'HOST', createInfo })}
       onJoin={(joinInfo) => setSession({ type: 'CLIENT', joinInfo })}
     />
   );

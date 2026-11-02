@@ -1,4 +1,4 @@
-import type { HostMode, RoomState, SeatState } from '../types/protocol';
+import type { RoomState, SeatState } from '../types/protocol';
 
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const HOST_PEER_ID = 'host';
@@ -10,18 +10,15 @@ export function createRoomCode() {
   return Array.from(values, (value) => ROOM_ALPHABET[value % ROOM_ALPHABET.length]).join('');
 }
 
-export function createSeats(totalSeats: number, hostMode: HostMode, previous: SeatState[] = []) {
+export function createSeats(totalSeats: number, previous: SeatState[] = []) {
   return Array.from({ length: totalSeats }, (_, index): SeatState => {
     const seatNumber = index + 1;
     const oldSeat = previous.find((seat) => seat.seatNumber === seatNumber);
     if (oldSeat) return { ...oldSeat, roleId: null, status: 'ALIVE', tags: [] };
-
-    const hostSeat = hostMode === 'PLAYER_AND_GOD' && seatNumber === 1;
     return {
       seatNumber,
-      peerId: hostSeat ? HOST_PEER_ID : null,
-      playerName: hostSeat ? '房主' : '',
-      isHost: hostSeat,
+      peerId: null,
+      playerName: '',
       roleId: null,
       status: 'ALIVE',
       tags: [],
@@ -29,16 +26,17 @@ export function createSeats(totalSeats: number, hostMode: HostMode, previous: Se
   });
 }
 
-export function createRoom(roomId: string): RoomState {
-  const totalSeats = DEFAULT_ROLES.length;
-  const hostMode: HostMode = 'GOD_ONLY';
+export function createRoom(roomId: string, selectedRoleIds: string[], creatorName: string): RoomState {
+  const seats = createSeats(selectedRoleIds.length);
+  if (seats[0]) seats[0] = { ...seats[0], peerId: HOST_PEER_ID, playerName: creatorName };
   return {
     roomId,
     gameStatus: 'SETUP',
-    hostMode,
-    totalSeats,
-    selectedRoleIds: [...DEFAULT_ROLES],
-    seats: createSeats(totalSeats, hostMode),
+    godPeerId: null,
+    godName: '',
+    totalSeats: selectedRoleIds.length,
+    selectedRoleIds: [...selectedRoleIds],
+    seats,
   };
 }
 
@@ -55,8 +53,4 @@ export function shuffle<T>(items: T[]) {
 
 export function getOccupiedSeats(room: RoomState) {
   return room.seats.filter((seat) => seat.peerId !== null);
-}
-
-export function getRoleLabel(roleId: string | null) {
-  return roleId ?? '未发牌';
 }
