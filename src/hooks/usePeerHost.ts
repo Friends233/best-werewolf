@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
-import { ROLE_REGISTRY } from '../config/roles';
+import { isCustomRoleId, isUniqueRole, resolveRole, stripRoleImages } from '../config/roles';
 import type {
   ClientMessage,
   CreateInfo,
@@ -12,13 +12,23 @@ import type {
   SeatState,
 } from '../types/protocol';
 import {
+  assignRolesWithPreferences,
   createRoom,
   createRoomCode,
   createSeats,
+  getBlockedPreselectRoles,
   getOccupiedSeats,
   HOST_PEER_ID,
-  shuffle,
+  MAX_CUSTOM_ROLES,
+  MAX_PRESELECT_COOLDOWN,
+  MIN_PRESELECT_COOLDOWN,
+  recordPreselectRound,
 } from '../utils/game';
+import {
+  mapToEntries,
+  saveHostSession,
+  type HostRestoreData,
+} from '../utils/sessionPersist';
 
 export function getHostPeerId(roomId: string) {
   return `best-werewolf-v1-${roomId}`;
@@ -27,6 +37,7 @@ export function getHostPeerId(roomId: string) {
 export function toPublicRoom(room: RoomState): PublicRoomState {
   return {
     ...room,
+    customRoles: stripRoleImages(room.customRoles),
     seats: room.seats.map((seat) => {
       const publicSeat: Partial<SeatState> = { ...seat };
       delete publicSeat.roleId;
@@ -43,16 +54,57 @@ function withReadyStatus(room: RoomState): RoomState {
   return { ...room, gameStatus: ready ? 'READY' : 'SETUP' };
 }
 
-export function usePeerHost(createInfo: CreateInfo) {
-  const [room, setRoom] = useState<RoomState>(() => createRoom(createRoomCode(), createInfo.selectedRoleIds, createInfo.playerName));
+export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
+  const [room, setRoom] = useState<RoomState>(() => restore?.room ?? createRoom(
+    createRoomCode(),
+    createInfo.selectedRoleIds,
+    createInfo.playerName,
+    createInfo.customRoles,
+  ));
   const [connectionState, setConnectionState] = useState<'CONNECTING' | 'OPEN' | 'ERROR'>('CONNECTING');
   const [connectionCount, setConnectionCount] = useState(0);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(() => (restore ? '已从本页缓存恢复房间，等待玩家重新连接。' : ''));
+  const [myPreselectRoleId, setMyPreselectRoleId] = useState<string | null>(
+    () => restore?.preferences.find(([peerId]) => peerId === HOST_PEER_ID)?.[1] ?? null,
+  );
+  const [myBlockedPreselectRoleIds, setMyBlockedPreselectRoleIds] = useState<string[]>([]);
   const roomRef = useRef(room);
   const connectionsRef = useRef(new Map<string, DataConnection>());
-  const playerNamesRef = useRef(new Map<string, string>([[HOST_PEER_ID, createInfo.playerName]]));
+  const playerNamesRef = useRef(new Map<string, string>(
+    restore?.playerNames ?? [[HOST_PEER_ID, createInfo.playerName]],
+  ));
+  /** 预选仅存房主端，不进入公开房间状态。 */
+  const preferencesRef = useRef(new Map<string, string>(restore?.preferences ?? []));
+  /** 每人近几局的预选记录（含 null），用于冷却；断线重连同 peerId 仍生效。 */
+  const preselectHistoryRef = useRef(new Map<string, Array<string | null>>(restore?.preselectHistory ?? []));
   const messageHandlerRef = useRef<(peerId: string, message: ClientMessage) => void>(() => undefined);
+  const persistTimerRef = useRef<number | null>(null);
+
+  const persistHostState = useCallback((immediate = false) => {
+    const write = () => {
+      saveHostSession({
+        playerName: playerNamesRef.current.get(HOST_PEER_ID) ?? createInfo.playerName,
+        room: roomRef.current,
+        preferences: mapToEntries(preferencesRef.current),
+        preselectHistory: mapToEntries(preselectHistoryRef.current),
+        playerNames: mapToEntries(playerNamesRef.current),
+      });
+    };
+    if (immediate) {
+      if (persistTimerRef.current !== null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      write();
+      return;
+    }
+    if (persistTimerRef.current !== null) window.clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = window.setTimeout(() => {
+      persistTimerRef.current = null;
+      write();
+    }, 250);
+  }, [createInfo.playerName]);
 
   const notify = useCallback((peerId: string, message: string) => {
     if (peerId === HOST_PEER_ID) setNotice(message);
@@ -76,11 +128,12 @@ export function usePeerHost(createInfo: CreateInfo) {
   const publish = useCallback((nextRoom: RoomState) => {
     roomRef.current = nextRoom;
     setRoom(nextRoom);
+    persistHostState();
     broadcast({ type: 'SYNC_ROOM_STATE', room: toPublicRoom(nextRoom) });
     if (nextRoom.godPeerId && nextRoom.godPeerId !== HOST_PEER_ID) {
       sendToPeer(nextRoom.godPeerId, { type: 'SYNC_GOD_STATE', room: nextRoom });
     }
-  }, [broadcast, sendToPeer]);
+  }, [broadcast, persistHostState, sendToPeer]);
 
   const fillWaitingPlayers = useCallback((state: RoomState): RoomState => {
     if (state.gameStatus !== 'SETUP' && state.gameStatus !== 'READY') return state;
@@ -104,6 +157,62 @@ export function usePeerHost(createInfo: CreateInfo) {
     publish(withReadyStatus(nextRoom));
   }, [fillWaitingPlayers, publish]);
 
+  const getBlockedForPeer = useCallback((peerId: string, cooldownRounds = roomRef.current.preselectCooldownRounds) => (
+    getBlockedPreselectRoles(preselectHistoryRef.current.get(peerId), cooldownRounds)
+  ), []);
+
+  const syncPreselect = useCallback((peerId: string, roleId: string | null) => {
+    const blockedRoleIds = getBlockedForPeer(peerId);
+    if (peerId === HOST_PEER_ID) {
+      setMyPreselectRoleId(roleId);
+      setMyBlockedPreselectRoleIds(blockedRoleIds);
+    } else {
+      sendToPeer(peerId, { type: 'SYNC_MY_PRESELECT', roleId, blockedRoleIds });
+    }
+    persistHostState();
+  }, [getBlockedForPeer, persistHostState, sendToPeer]);
+
+  const clearPreference = useCallback((peerId: string) => {
+    if (!preferencesRef.current.has(peerId)) {
+      syncPreselect(peerId, null);
+      return;
+    }
+    preferencesRef.current.delete(peerId);
+    syncPreselect(peerId, null);
+  }, [syncPreselect]);
+
+  const clearAllPreferences = useCallback(() => {
+    const peerIds = new Set([
+      ...preferencesRef.current.keys(),
+      ...preselectHistoryRef.current.keys(),
+      HOST_PEER_ID,
+    ]);
+    preferencesRef.current.clear();
+    peerIds.forEach((peerId) => syncPreselect(peerId, null));
+    setMyPreselectRoleId(null);
+  }, [syncPreselect]);
+
+  const scrubInvalidPreferences = useCallback((selectedRoleIds: string[]) => {
+    const available = new Set(selectedRoleIds);
+    Array.from(preferencesRef.current.entries()).forEach(([peerId, roleId]) => {
+      if (!available.has(roleId)) clearPreference(peerId);
+    });
+  }, [clearPreference]);
+
+  const scrubBlockedPreferences = useCallback((cooldownRounds: number) => {
+    Array.from(preferencesRef.current.entries()).forEach(([peerId, roleId]) => {
+      if (getBlockedPreselectRoles(preselectHistoryRef.current.get(peerId), cooldownRounds).includes(roleId)) {
+        clearPreference(peerId);
+      } else {
+        syncPreselect(peerId, roleId);
+      }
+    });
+    // 刷新无当前预选者的冷却展示
+    Array.from(preselectHistoryRef.current.keys()).forEach((peerId) => {
+      if (!preferencesRef.current.has(peerId)) syncPreselect(peerId, null);
+    });
+  }, [clearPreference, syncPreselect]);
+
   messageHandlerRef.current = (peerId, message) => {
     const current = roomRef.current;
     const playerName = playerNamesRef.current.get(peerId) ?? '玩家';
@@ -120,6 +229,7 @@ export function usePeerHost(createInfo: CreateInfo) {
         godName: state.godPeerId === peerId ? nextName : state.godName,
         seats: state.seats.map((seat) => seat.peerId === peerId ? { ...seat, playerName: nextName } : seat),
       }));
+      syncPreselect(peerId, preferencesRef.current.get(peerId) ?? null);
       return;
     }
 
@@ -129,6 +239,7 @@ export function usePeerHost(createInfo: CreateInfo) {
         notify(peerId, `上帝位已由 ${current.godName} 使用。`);
         return;
       }
+      clearPreference(peerId);
       updateRoom((state) => ({
         ...state,
         godPeerId: peerId,
@@ -171,17 +282,72 @@ export function usePeerHost(createInfo: CreateInfo) {
       return;
     }
 
+    if (message.type === 'PRESELECT_ROLE') {
+      if (!current.preselectEnabled) {
+        notify(peerId, '本局未开启身份预选。');
+        return;
+      }
+      if (current.godPeerId === peerId) {
+        notify(peerId, '上帝位不能预选身份。');
+        return;
+      }
+      if (current.gameStatus === 'DEALT' || current.gameStatus === 'FINISHED') {
+        notify(peerId, '本局已发牌，无法修改预选。');
+        return;
+      }
+      if (!current.seats.some((seat) => seat.peerId === peerId)) {
+        notify(peerId, '入座后才能预选身份。');
+        return;
+      }
+      const roleId = message.roleId;
+      if (roleId === null) {
+        clearPreference(peerId);
+        return;
+      }
+      if (!current.selectedRoleIds.includes(roleId) || !resolveRole(roleId, current.customRoles)) {
+        notify(peerId, '该身份不在本局配置中。');
+        return;
+      }
+      if (getBlockedForPeer(peerId).includes(roleId)) {
+        notify(peerId, `近 ${current.preselectCooldownRounds} 局内已预选过该身份，请换一个。`);
+        return;
+      }
+      preferencesRef.current.set(peerId, roleId);
+      syncPreselect(peerId, roleId);
+      return;
+    }
+
     if (current.godPeerId !== peerId) {
       notify(peerId, '只有坐在上帝位的玩家可以执行这个操作。');
+      return;
+    }
+
+    if (message.type === 'SET_PRESELECT_ENABLED') {
+      const enabled = Boolean(message.enabled);
+      if (enabled === current.preselectEnabled) return;
+      if (!enabled) clearAllPreferences();
+      updateRoom((state) => ({ ...state, preselectEnabled: enabled }));
+      return;
+    }
+
+    if (message.type === 'SET_PRESELECT_COOLDOWN') {
+      const rounds = Math.round(message.rounds);
+      if (!Number.isFinite(rounds) || rounds < MIN_PRESELECT_COOLDOWN || rounds > MAX_PRESELECT_COOLDOWN) {
+        notify(peerId, `冷却局数需在 ${MIN_PRESELECT_COOLDOWN}–${MAX_PRESELECT_COOLDOWN} 之间。`);
+        return;
+      }
+      if (rounds === current.preselectCooldownRounds) return;
+      updateRoom((state) => ({ ...state, preselectCooldownRounds: rounds }));
+      scrubBlockedPreferences(rounds);
       return;
     }
 
     if (message.type === 'CHANGE_ROLE_COUNT') {
       if (current.gameStatus === 'DEALT' || current.gameStatus === 'FINISHED') return;
       const { roleId, delta } = message;
-      if (!ROLE_REGISTRY[roleId] || (delta !== 1 && delta !== -1)) return;
+      if (!resolveRole(roleId, current.customRoles) || (delta !== 1 && delta !== -1)) return;
       const count = current.selectedRoleIds.filter((id) => id === roleId).length;
-      const unique = roleId !== 'villager' && roleId !== 'werewolf';
+      const unique = isUniqueRole(roleId);
       if (delta > 0 && unique && count >= 1) return;
       if (delta < 0 && count <= (roleId === 'werewolf' ? 1 : 0)) return;
       const nextTotal = current.totalSeats + delta;
@@ -202,6 +368,74 @@ export function usePeerHost(createInfo: CreateInfo) {
         selectedRoleIds,
         seats: createSeats(nextTotal, state.seats),
       }));
+      scrubInvalidPreferences(selectedRoleIds);
+      return;
+    }
+
+    if (message.type === 'ADD_CUSTOM_ROLE') {
+      if (current.gameStatus === 'DEALT' || current.gameStatus === 'FINISHED') return;
+      const role = message.role;
+      if (!isCustomRoleId(role.id) || !role.name.trim()) return;
+      if (current.customRoles.length >= MAX_CUSTOM_ROLES) {
+        notify(peerId, `最多添加 ${MAX_CUSTOM_ROLES} 个自定义身份。`);
+        return;
+      }
+      if (current.customRoles.some((item) => item.id === role.id)) return;
+      if (current.totalSeats >= 12) {
+        notify(peerId, '当前支持 4–12 人游戏。');
+        return;
+      }
+      updateRoom((state) => {
+        const selectedRoleIds = [...state.selectedRoleIds, role.id];
+        const totalSeats = selectedRoleIds.length;
+        return {
+          ...state,
+          customRoles: [...state.customRoles, {
+            ...role,
+            name: role.name.trim().slice(0, 8),
+            description: role.description || '自定义身份，技能由线下协商。',
+            visual: { ...role.visual },
+          }],
+          selectedRoleIds,
+          totalSeats,
+          seats: createSeats(totalSeats, state.seats),
+        };
+      });
+      return;
+    }
+
+    if (message.type === 'REMOVE_CUSTOM_ROLE') {
+      if (current.gameStatus === 'DEALT' || current.gameStatus === 'FINISHED') return;
+      const { roleId } = message;
+      if (!isCustomRoleId(roleId) || !current.customRoles.some((role) => role.id === roleId)) return;
+      const removedCount = current.selectedRoleIds.filter((id) => id === roleId).length;
+      const nextTotal = current.totalSeats - removedCount;
+      if (nextTotal < 4) {
+        notify(peerId, '删除后人数不能少于 4 人，请先调整其他身份。');
+        return;
+      }
+      if (removedCount > 0) {
+        for (let index = 0; index < removedCount; index += 1) {
+          const seat = current.seats[current.totalSeats - 1 - index];
+          if (seat?.peerId !== null) {
+            notify(peerId, '请先让末位玩家离座，再删除该身份。');
+            return;
+          }
+        }
+      }
+      const nextSelected = current.selectedRoleIds.filter((id) => id !== roleId);
+      updateRoom((state) => {
+        const selectedRoleIds = state.selectedRoleIds.filter((id) => id !== roleId);
+        const totalSeats = selectedRoleIds.length;
+        return {
+          ...state,
+          customRoles: state.customRoles.filter((role) => role.id !== roleId),
+          selectedRoleIds,
+          totalSeats,
+          seats: createSeats(totalSeats, state.seats),
+        };
+      });
+      scrubInvalidPreferences(nextSelected);
       return;
     }
 
@@ -226,18 +460,31 @@ export function usePeerHost(createInfo: CreateInfo) {
         notify(peerId, '所有玩家入座后才能发牌。');
         return;
       }
-      const roles = shuffle(current.selectedRoleIds);
+      const activePreferences = current.preselectEnabled
+        ? preferencesRef.current
+        : new Map<string, string>();
+      const occupiedPeerIds = getOccupiedSeats(current).map((seat) => seat.peerId!);
+      recordPreselectRound(preselectHistoryRef.current, occupiedPeerIds, activePreferences);
+      const dealtSeats = assignRolesWithPreferences(
+        current.selectedRoleIds,
+        current.seats,
+        activePreferences,
+      );
       const dealtRoom: RoomState = {
         ...current,
         gameStatus: 'DEALT',
-        seats: current.seats.map((seat, index) => ({ ...seat, roleId: roles[index] })),
+        seats: dealtSeats,
       };
       publish(dealtRoom);
       dealtRoom.seats.forEach((seat) => {
         if (seat.peerId && seat.peerId !== HOST_PEER_ID && seat.roleId) {
-          sendToPeer(seat.peerId, { type: 'ASSIGN_ROLE', role: ROLE_REGISTRY[seat.roleId] });
+          const role = resolveRole(seat.roleId, dealtRoom.customRoles);
+          if (role) sendToPeer(seat.peerId, { type: 'ASSIGN_ROLE', role });
         }
       });
+      // 本局预选已写入历史，清空当前预选并下发新的冷却封锁列表
+      preferencesRef.current.clear();
+      occupiedPeerIds.forEach((id) => syncPreselect(id, null));
       return;
     }
 
@@ -266,6 +513,7 @@ export function usePeerHost(createInfo: CreateInfo) {
     }
 
     if (message.type === 'RESET_GAME') {
+      clearAllPreferences();
       updateRoom((state) => ({
         ...state,
         gameStatus: 'SETUP',
@@ -276,43 +524,100 @@ export function usePeerHost(createInfo: CreateInfo) {
   };
 
   useEffect(() => {
+    // 恢复后同步房主自己的预选冷却展示；并立刻落盘一份快照。
+    const hostPref = preferencesRef.current.get(HOST_PEER_ID) ?? null;
+    setMyBlockedPreselectRoleIds(getBlockedForPeer(HOST_PEER_ID));
+    setMyPreselectRoleId(hostPref);
+    persistHostState(true);
+
+    const flush = () => persistHostState(true);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (persistTimerRef.current !== null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
+  }, [getBlockedForPeer, persistHostState]);
+
+  useEffect(() => {
     const peer = new Peer(getHostPeerId(roomRef.current.roomId), { debug: 0 });
     peer.on('open', () => {
       setConnectionState('OPEN');
       setError('');
     });
     peer.on('error', (peerError) => {
-      setConnectionState('ERROR');
-      setError(peerError.type === 'unavailable-id' ? '房间码冲突，请返回重新创建。' : '无法连接信令服务，请检查网络。');
+      if (peerError.type === 'unavailable-id') {
+        setConnectionState('ERROR');
+        setError('房间码冲突，请返回重新创建。');
+        return;
+      }
+      // 信令闪断很常见，已建连的玩家通常不受影响；不要反复弹 error toast
+      if (peerError.type === 'network' || peerError.type === 'server-error' || peerError.type === 'socket-error' || peerError.type === 'socket-closed') {
+        if (!peer.destroyed && !peer.open) peer.reconnect();
+        return;
+      }
+      if (!peer.open) {
+        setConnectionState('ERROR');
+        setError('无法连接信令服务，请检查网络。');
+      }
     });
     peer.on('disconnected', () => {
-      setError('信令连接中断，正在恢复；已连接玩家可继续游戏。');
+      // 仅与 PeerServer 的 WebSocket 断开，数据通道往往仍可用；静默重连即可
       if (!peer.destroyed) peer.reconnect();
     });
     peer.on('connection', (connection) => {
       const peerId = connection.peer;
-      connectionsRef.current.get(peerId)?.close();
+      const previous = connectionsRef.current.get(peerId);
       connectionsRef.current.set(peerId, connection);
-      connection.on('open', () => {
+      if (previous && previous !== connection) {
+        try {
+          previous.close();
+        } catch {
+          // ignore
+        }
+      }
+
+      const syncOnOpen = () => {
+        if (connectionsRef.current.get(peerId) !== connection) return;
         setConnectionCount(connectionsRef.current.size);
         sendToPeer(peerId, { type: 'SYNC_ROOM_STATE', room: toPublicRoom(roomRef.current) });
         if (roomRef.current.godPeerId === peerId) {
           sendToPeer(peerId, { type: 'SYNC_GOD_STATE', room: roomRef.current });
         }
         const seat = roomRef.current.seats.find((item) => item.peerId === peerId);
-        if (seat?.roleId) sendToPeer(peerId, { type: 'ASSIGN_ROLE', role: ROLE_REGISTRY[seat.roleId] });
-      });
+        if (seat?.roleId) {
+          const role = resolveRole(seat.roleId, roomRef.current.customRoles);
+          if (role) sendToPeer(peerId, { type: 'ASSIGN_ROLE', role });
+        }
+        syncPreselect(peerId, preferencesRef.current.get(peerId) ?? null);
+      };
+
+      connection.on('open', syncOnOpen);
+      if (connection.open) syncOnOpen();
       connection.on('data', (data) => messageHandlerRef.current(peerId, data as ClientMessage));
       connection.on('close', () => {
         if (connectionsRef.current.get(peerId) !== connection) return;
         connectionsRef.current.delete(peerId);
-        playerNamesRef.current.delete(peerId);
         setConnectionCount(connectionsRef.current.size);
+        // 游戏中保留座位与昵称，便于断线重连；仅准备阶段清座。
+        const inLobby = roomRef.current.gameStatus === 'SETUP' || roomRef.current.gameStatus === 'READY';
+        if (inLobby) {
+          playerNamesRef.current.delete(peerId);
+          preferencesRef.current.delete(peerId);
+        }
         updateRoom((state) => ({
           ...state,
           godPeerId: state.godPeerId === peerId ? null : state.godPeerId,
           godName: state.godPeerId === peerId ? '' : state.godName,
-          seats: state.gameStatus === 'SETUP' || state.gameStatus === 'READY'
+          seats: inLobby
             ? state.seats.map((seat) => seat.peerId === peerId ? { ...seat, peerId: null, playerName: '' } : seat)
             : state.seats,
         }));
@@ -322,7 +627,7 @@ export function usePeerHost(createInfo: CreateInfo) {
       peer.destroy();
       connectionsRef.current.clear();
     };
-  }, [sendToPeer, updateRoom]);
+  }, [sendToPeer, syncPreselect, updateRoom]);
 
   const send = useCallback((message: ClientMessage) => {
     setNotice('');
@@ -332,6 +637,8 @@ export function usePeerHost(createInfo: CreateInfo) {
   return {
     room,
     publicRoom: toPublicRoom(room),
+    myPreselectRoleId,
+    myBlockedPreselectRoleIds,
     connectionState,
     connectionCount,
     error,

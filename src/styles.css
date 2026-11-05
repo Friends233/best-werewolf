@@ -46,10 +46,10 @@ svg { flex-shrink: 0; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 18px;
   min-height: 100dvh;
-  padding: max(18px, env(safe-area-inset-top)) 14px max(18px, env(safe-area-inset-bottom));
+  padding: max(72px, calc(env(safe-area-inset-top) + 48px)) 14px max(18px, env(safe-area-inset-bottom));
   background: radial-gradient(circle at 50% 20%, #1b1c22 0, #0c0e13 55%);
 }
 .simple-brand { display: flex; align-items: center; gap: 8px; color: var(--gold); }
@@ -74,22 +74,180 @@ svg { flex-shrink: 0; }
 .role-editor { padding: 12px; border: 1px solid #2c2f37; border-radius: 10px; background: #13151b; }
 .role-editor__heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: #b9b9b6; font-size: 12px; }
 .role-editor__heading strong { color: #7f838b; font-size: 10px; font-weight: 400; }
-.role-editor__grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
-.role-editor__item { display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 7px 2px; border-radius: 7px; background: #1b1e24; }
-.role-editor__dot { width: 6px; height: 6px; margin-bottom: 5px; border-radius: 50%; }
+.role-editor__grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; max-height: 166px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.role-editor__grid::-webkit-scrollbar { display: none; }
+.role-editor__item { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 7px 2px; border-radius: 7px; background: #1b1e24; }
+.role-editor__item--custom { border: 1px dashed #3a3d46; }
+.role-editor__art { width: 24px; height: 30px; margin-bottom: 5px; border-radius: 3px; }
 .role-editor__name { margin-bottom: 6px; color: #c5c3bd; font-size: 10px; white-space: nowrap; }
 .role-editor__count { color: #8d8f93; font-size: 11px; font-weight: 500; }
 .role-editor__stepper { display: flex; align-items: center; justify-content: center; gap: 2px; }
 .role-editor__stepper button { display: grid; place-items: center; width: 18px; height: 20px; padding: 0; border: 0; border-radius: 4px; color: #aaa69f; background: #2a2d34; }
 .role-editor__stepper button:disabled { opacity: .25; }
 .role-editor__stepper strong { width: 14px; color: #ddd7cc; font-size: 11px; text-align: center; }
+.role-editor__remove { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; color: #8d8f93; background: #2a2d34; }
+.role-editor__custom { margin-top: 8px; }
+.role-editor__add { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; min-height: 30px; border: 1px dashed #3a3d46; border-radius: 7px; color: #8d8f93; background: transparent; font-size: 11px; }
+.role-editor__add:disabled { opacity: .35; }
+.role-editor__form { display: flex; flex-direction: column; gap: 6px; }
+.role-editor__form-row { display: flex; align-items: center; gap: 6px; }
+.role-editor__form-row input { flex: 1; min-width: 0; height: 30px; padding: 0 9px; border: 1px solid #343740; border-radius: 6px; color: #e4e0d8; background: #101218; font-size: 12px; }
+.role-editor__upload { display: grid; place-items: center; overflow: hidden; width: 30px; height: 30px; padding: 0; border: 1px solid #343740; border-radius: 6px; color: #8d8f93; background: #101218; }
+.role-editor__upload img { width: 100%; height: 100%; object-fit: cover; }
+.role-editor__confirm { min-height: 30px; padding: 0 10px; border: 0; border-radius: 6px; color: #1b1711; background: var(--gold); font-size: 11px; font-weight: 600; }
+.role-editor__cancel { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 6px; color: #8d8f93; background: #2a2d34; }
+.role-editor__form small { color: #60656e; font-size: 9px; }
+.role-editor__form-error { color: #d67b7e; font-size: 10px; }
+
+/* 上帝：预选开关与冷却 */
+.preselect-god-settings { display: grid; gap: 8px; margin-top: 4px; }
+.god-compact-panel > .preselect-god-settings { margin-top: 12px; }
+.preselect-god-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #2c3038;
+  border-radius: 8px;
+  background: #171a20;
+}
+.preselect-god-settings__row.disabled { opacity: .45; }
+.preselect-god-settings__row > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.preselect-god-settings__row strong { color: #d2cec6; font-size: 12px; font-weight: 500; }
+.preselect-god-settings__row small { color: #6d727a; font-size: 9px; line-height: 1.4; }
+.preselect-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 52px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #3a3e46;
+  border-radius: 999px;
+  color: #8b9098;
+  background: #22262d;
+  font-size: 11px;
+}
+.preselect-toggle i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5c6169;
+}
+.preselect-toggle.on {
+  border-color: #776349;
+  color: #e1c9a8;
+  background: rgba(194, 163, 121, .1);
+}
+.preselect-toggle.on i { background: var(--green); }
+.preselect-cooldown-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.preselect-cooldown-stepper button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: #aaa69f;
+  background: #2a2d34;
+}
+.preselect-cooldown-stepper button:disabled { opacity: .25; }
+.preselect-cooldown-stepper strong {
+  width: 18px;
+  color: #ddd7cc;
+  font-size: 13px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 玩家预选身份（仅自己可见） */
+.role-preselect__hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: -2px 0 10px;
+  color: #6d727a;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.role-preselect__hint svg { flex-shrink: 0; margin-top: 1px; }
+.role-preselect__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.role-preselect__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px 3px 7px;
+  border: 1px solid #30333b;
+  border-radius: 8px;
+  color: #b7b5af;
+  background: #1b1e24;
+}
+.role-preselect__item.active {
+  border-color: #8a7253;
+  color: #e6d7bd;
+  background: rgba(194, 163, 121, .1);
+  box-shadow: inset 0 0 0 1px rgba(194, 163, 121, .18);
+}
+.role-preselect__item.blocked {
+  opacity: .42;
+  color: #7a7f87;
+}
+.role-preselect__item.blocked em { color: #9a6d6d; }
+.role-preselect__art {
+  width: 28px;
+  height: 36px;
+  border-radius: 4px;
+}
+.role-preselect__item strong {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.role-preselect__item em {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: #7d828b;
+  font-size: 8px;
+  font-style: normal;
+}
+.role-preselect__item.active em { color: #b7a07d; }
 
 /* 房间通用 */
 .room-shell { min-height: 100dvh; background: radial-gradient(circle at 80% 0, rgba(194,163,121,.05), transparent 35%), #0c0e13; }
 .room-topbar { display: flex; align-items: center; gap: 16px; height: 52px; padding: 0 max(14px, calc((100vw - 900px) / 2)); border-bottom: 1px solid #24272e; background: rgba(13,15,20,.95); }
-.room-topbar .simple-brand strong { font-size: 17px; }
 .room-code-label { color: #777c85; font-size: 11px; }
 .room-code-label strong { margin-left: 4px; color: var(--gold-light); font-size: 14px; letter-spacing: .13em; }
+.room-code-button { min-height: 31px; padding: 0 7px; border: 1px solid #2c3038; border-radius: 7px; background: #15181e; }
+.room-occupancy { display: inline-flex; align-items: center; gap: 4px; min-height: 31px; padding: 0 9px; border: 1px solid #2c3038; border-radius: 7px; color: #858a93; background: #15181e; font-size: 11px; white-space: nowrap; }
+.room-occupancy strong { color: var(--gold-light); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.room-occupancy span { color: #6f747c; font-variant-numeric: tabular-nums; }
+.room-occupancy em { margin-left: 1px; color: #6f747c; font-style: normal; font-size: 10px; }
+.invite-modal { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(4,6,9,.82); backdrop-filter: blur(4px); }
+.invite-card { position: relative; display: flex; flex-direction: column; align-items: center; width: min(300px, 100%); padding: 24px; border: 1px solid #343740; border-radius: 14px; background: #16191f; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+.invite-card > strong { color: #e5dfd5; font-size: 16px; }
+.invite-card > p { margin-top: 8px; color: #858a93; font-size: 11px; }
+.invite-card__close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 30px; min-height: 30px; padding: 0; border: 0; border-radius: 6px; color: #858a93; background: #22252c; }
+.invite-card__qr { margin: 20px 0 14px; padding: 10px; border-radius: 10px; background: #fff; line-height: 0; }
+.invite-card > span { color: #858a93; font-size: 11px; }
+.invite-card > span strong { margin-left: 6px; color: var(--gold-light); font-size: 18px; letter-spacing: .15em; }
 .online-label { display: flex; align-items: center; gap: 5px; margin-left: auto; color: #747a82; font-size: 9px; }
 .online-label i { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
 .room-exit { display: grid; place-items: center; width: 31px; height: 31px; padding: 0; border: 0; border-radius: 7px; color: #777c85; background: #191c22; }
@@ -127,17 +285,149 @@ svg { flex-shrink: 0; }
 .room-main-action { min-height: 42px; }
 .waiting-action { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; color: #767b83; font-size: 11px; }
 
-/* 玩家身份 */
+/* 角色素材 */
+.role-artwork { display: block; object-fit: cover; object-position: center top; background: #fff; }
+.role-artwork--blank { border: 1px solid #e8e8e8; background: #fff; }
+.role-editor__art.role-artwork--blank,
+.god-seat-card__art.role-artwork--blank { border-color: #2f333b; background: #101318; }
+
+/* 玩家固定尺寸翻转身份卡 */
 .player-role-section { width: min(430px, 100%); margin: 0 auto; }
 .alive-text { color: var(--green) !important; }
 .out-text { color: var(--red) !important; }
-.compact-role-card { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 275px; padding: 24px; border: 1px solid color-mix(in srgb, var(--role-color) 40%, #383a40); border-radius: 13px; color: var(--role-color); background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--role-color) 12%, transparent), transparent 42%), #12151a; }
-.compact-role-card > svg { margin-bottom: 20px; }
-.compact-role-card h1 { color: #e5dfd5; font-size: 23px; font-weight: 600; letter-spacing: .08em; }
-.compact-role-card p { max-width: 280px; margin-top: 12px; color: #82858b; font-size: 11px; line-height: 1.7; text-align: center; }
-.compact-role-card small { display: flex; align-items: center; gap: 5px; margin-top: 24px; color: #656a72; font-size: 9px; }
-.compact-role-card__symbol { display: grid; place-items: center; width: 75px; height: 75px; margin-bottom: 15px; border-radius: 50%; color: white; background: color-mix(in srgb, var(--role-color) 60%, #222); font-size: 32px; box-shadow: 0 0 0 7px color-mix(in srgb, var(--role-color) 7%, transparent); }
-.compact-role-card.revealed h1 { font-size: 29px; }
+/* Card art is ~2:3 (1696×2528); keep the frame matched so the ornate back isn't cropped. */
+.identity-flip {
+  display: block;
+  width: min(240px, 72vw);
+  aspect-ratio: 1696 / 2528;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
+}
+.identity-flip__inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
+  transition: transform .55s cubic-bezier(.2,.7,.2,1);
+}
+.identity-flip.revealed .identity-flip__inner {
+  -webkit-transform: rotateY(180deg);
+  transform: rotateY(180deg);
+}
+/* iOS Safari: overflow:hidden on the same node as backface-visibility breaks hiding; clip children instead. */
+.identity-card {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  border: 1px solid color-mix(in srgb, var(--role-color) 45%, #383a40);
+  border-radius: 14px;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  box-shadow: 0 12px 30px rgba(0,0,0,.28);
+}
+.identity-card *,
+.identity-card::before,
+.identity-card::after {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.identity-card--back {
+  border-color: #3a3428;
+  color: #e5dfd5;
+  background: #12151a;
+  -webkit-transform: rotateY(0deg) translateZ(1px);
+  transform: rotateY(0deg) translateZ(1px);
+}
+.identity-card__back-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  border-radius: 13px;
+  pointer-events: none;
+}
+.identity-card__back-info {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 10px 9px;
+  border: 1px solid rgba(194, 163, 121, .28);
+  border-radius: 10px;
+  background: rgba(8, 10, 14, .72);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  text-align: center;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .28);
+}
+.identity-card__back-info > strong {
+  color: #efe6d6;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.identity-card__privacy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #a7adb6;
+  font-size: 9px;
+}
+.identity-card--front {
+  display: block;
+  background: #111;
+  -webkit-transform: rotateY(180deg) translateZ(1px);
+  transform: rotateY(180deg) translateZ(1px);
+}
+.identity-card__art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 13px;
+  object-fit: fill;
+}
+.identity-card__front-info {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 82px;
+  padding: 17px 12px 11px;
+  border-radius: 0 0 13px 13px;
+  color: white;
+  background: linear-gradient(transparent, rgba(5,7,10,.94) 30%);
+  text-align: center;
+}
+.identity-card__front-info > strong { font-size: 21px; letter-spacing: .08em; }
+.identity-card__front-info > small { display: -webkit-box; overflow: hidden; color: #c4c4c4; font-size: 8px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.identity-card--blank .identity-card__front-info { border-top: 1px solid #e8e8e8; color: #252525; background: #fff; }
+.identity-card--blank .identity-card__front-info > small { color: #777; }
+/* Extra iOS safeguard: fully hide the face that is turned away after mid-flip. */
+.identity-flip.revealed .identity-card--back { visibility: hidden; transition: visibility 0s linear .28s; }
+.identity-flip:not(.revealed) .identity-card--front { visibility: hidden; transition: visibility 0s linear .28s; }
+.identity-flip:not(.revealed) .identity-card--back,
+.identity-flip.revealed .identity-card--front { visibility: visible; transition: visibility 0s linear 0s; }
+.identity-flip__hint { display: flex; align-items: center; justify-content: center; gap: 5px; height: 18px; margin-top: 9px; color: #6d727a; font-size: 9px; }
 .inline-loading { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 150px; color: #858991; font-size: 12px; }
 .connecting-view { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: calc(100dvh - 52px); padding: 25px; color: var(--gold); text-align: center; }
 .connecting-view h1 { color: #ddd8cf; font-size: 20px; }
@@ -151,6 +441,7 @@ svg { flex-shrink: 0; }
 .god-seat-card__number { position: absolute; top: 4px; left: 5px; color: #76664e; font-family: Georgia, serif; font-size: 9px; }
 .god-seat-card__status { position: absolute; top: 4px; right: 4px; color: var(--green); font-size: 7px; }
 .god-seat-card__status.out { color: var(--red); }
+.god-seat-card__art { width: 24px; height: 30px; margin: 2px 0 3px; border-radius: 3px; }
 .god-seat-grid button strong { overflow: hidden; max-width: 100%; margin: 3px 0; color: #d0cdc6; font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .god-seat-grid button small { font-size: 9px; }
 .god-seat-card__badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; width: 100%; margin-top: 4px; }
@@ -165,20 +456,24 @@ svg { flex-shrink: 0; }
 .compact-tags { display: flex; gap: 5px; margin-top: 7px; }
 .compact-tags button { display: flex; flex: 1; align-items: center; justify-content: center; gap: 2px; min-height: 24px; padding: 0 4px; border: 0; border-radius: 5px; color: #656a72; background: #202329; font-size: 8px; }
 .compact-tags button.active { color: #c9b18e; background: rgba(194,163,121,.1); }
+.god-reset-button { display: flex; align-items: center; justify-content: center; gap: 7px; width: min(220px, 100%); min-height: 42px; margin: 12px auto 0; padding: 0 24px; border: 1px solid #4a4133; border-radius: 8px; color: #c8ae87; background: #24241f; font-size: 13px; }
+.god-reset-button.confirming { border-color: #694344; color: #e0b2a4; background: #3b2727; }
 
 @media (max-width: 600px) {
   .compact-seat-grid, .god-seat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .room-topbar { gap: 11px; }
+  .role-preselect__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .room-topbar { gap: 8px; }
+  .room-occupancy { padding: 0 7px; }
+  .room-occupancy em { display: none; }
 }
 
 @media (max-height: 700px) {
-  .simple-landing { justify-content: flex-start; gap: 12px; }
+  .simple-landing { gap: 12px; padding-top: max(28px, calc(env(safe-area-inset-top) + 16px)); }
   .start-card__body { padding: 16px; }
   .compact-room-main { gap: 8px; padding-top: 9px; }
   .god-seat { min-height: 51px; padding-top: 7px; padding-bottom: 7px; }
   .compact-seat { min-height: 58px; }
   .god-seat-grid button { min-height: 68px; }
-  .compact-role-card { min-height: 240px; }
   .role-editor { padding: 9px; }
   .role-editor__heading { margin-bottom: 7px; }
 }

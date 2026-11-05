@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, KeyRound, Moon, Plus, UserRound } from 'lucide-react';
+import type { RoleDefinition } from '../config/roles';
 import type { CreateInfo, JoinInfo } from '../types/protocol';
 import { DEFAULT_ROLES } from '../utils/game';
 import { RoleEditor } from './RoleEditor';
@@ -15,6 +16,7 @@ export function Landing({ initialRoomId, onCreate, onJoin }: LandingProps) {
   const [roomId, setRoomId] = useState(initialRoomId);
   const [playerName, setPlayerName] = useState('');
   const [roles, setRoles] = useState([...DEFAULT_ROLES]);
+  const [customRoles, setCustomRoles] = useState<RoleDefinition[]>([]);
   const [error, setError] = useState('');
 
   const changeRole = (roleId: string, delta: number) => {
@@ -24,6 +26,23 @@ export function Landing({ initialRoomId, onCreate, onJoin }: LandingProps) {
       else next.splice(next.lastIndexOf(roleId), 1);
       return next;
     });
+    setError('');
+  };
+
+  const addCustomRole = (role: RoleDefinition) => {
+    setCustomRoles((current) => [...current, role]);
+    setRoles((current) => [...current, role.id]);
+    setError('');
+  };
+
+  const removeCustomRole = (roleId: string) => {
+    const nextRoles = roles.filter((id) => id !== roleId);
+    if (nextRoles.length < 4) {
+      setError('删除后人数不能少于 4 人，请先调整其他身份。');
+      return;
+    }
+    setCustomRoles((current) => current.filter((role) => role.id !== roleId));
+    setRoles(nextRoles);
     setError('');
   };
 
@@ -78,15 +97,32 @@ export function Landing({ initialRoomId, onCreate, onJoin }: LandingProps) {
             onKeyDown={(event) => { if (event.key === 'Enter' && tab === 'join') handleJoin(); }}
           /></div>
 
-          {tab === 'create' && <RoleEditor selectedRoleIds={roles} onChange={changeRole} />}
+          {tab === 'create' && (
+            <RoleEditor
+              selectedRoleIds={roles}
+              customRoles={customRoles}
+              onChange={changeRole}
+              onAddCustom={addCustomRole}
+              onRemoveCustom={removeCustomRole}
+            />
+          )}
           {error && <p className="field-error" role="alert">{error}</p>}
           <button
             className="button button--primary button--full start-button"
             type="button"
             onClick={() => {
               if (!validName()) return;
-              if (tab === 'create') onCreate({ playerName: playerName.trim().slice(0, 12), selectedRoleIds: roles });
-              else handleJoin();
+              if (tab === 'create') {
+                if (roles.length < 4) {
+                  setError('至少需要 4 张身份牌。');
+                  return;
+                }
+                onCreate({
+                  playerName: playerName.trim().slice(0, 12),
+                  selectedRoleIds: roles,
+                  customRoles,
+                });
+              } else handleJoin();
             }}
           >{tab === 'create' ? '创建房间' : '加入房间'}<ArrowRight size={17} /></button>
           <p className="start-card__note">{tab === 'create' ? '创建后，任何人都可以坐上上帝位' : '创建者需保持房间页面打开'}</p>
