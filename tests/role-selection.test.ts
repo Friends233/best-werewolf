@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { ROLE_ORDER, ROLE_REGISTRY } from '../src/config/roles.ts';
 import type { SeatState } from '../src/types/protocol.ts';
@@ -6,6 +7,7 @@ import { assignRolesWithPreferences } from '../src/utils/game.ts';
 
 const DEAL_COUNT = 100;
 const ROLE_POOL = [...ROLE_ORDER];
+const CARD_BACK_ASSET = new URL('../src/assets/cardBack.jpg', import.meta.url);
 
 function createOccupiedSeats(): SeatState[] {
   return ROLE_POOL.map((_, index) => ({
@@ -17,6 +19,22 @@ function createOccupiedSeats(): SeatState[] {
     tags: [],
   }));
 }
+
+test('卡背素材是可用的 JPEG 文件', async () => {
+  const image = await readFile(CARD_BACK_ASSET);
+
+  assert.ok(image.byteLength > 0, '卡背素材不能为空文件');
+  assert.deepEqual(
+    [...image.subarray(0, 3)],
+    [0xff, 0xd8, 0xff],
+    '卡背素材必须以 JPEG 起始标记开头',
+  );
+  assert.deepEqual(
+    [...image.subarray(-2)],
+    [0xff, 0xd9],
+    '卡背素材必须以 JPEG 结束标记结尾',
+  );
+});
 
 test('100 局全身份发牌统计', () => {
   const seatRoleCounts = ROLE_POOL.map(() =>
