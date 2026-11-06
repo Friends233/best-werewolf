@@ -55,6 +55,7 @@ svg { flex-shrink: 0; }
 .simple-brand { display: flex; align-items: center; gap: 8px; color: var(--gold); }
 .simple-brand strong { color: #e8e3da; font-size: 19px; letter-spacing: .12em; }
 .simple-brand > span { margin-left: 4px; color: #676c75; font-size: 11px; letter-spacing: .05em; }
+.simple-brand > .debug-mode-badge { padding: 3px 6px; border: 1px solid #5e543f; border-radius: 4px; color: #cdb58f; background: rgba(194,163,121,.08); font-size: 9px; }
 .start-card { width: min(400px, 100%); overflow: hidden; border: 1px solid #30323a; border-radius: 14px; background: #16191f; box-shadow: 0 22px 60px rgba(0,0,0,.25); }
 .start-card__tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 5px; border-bottom: 1px solid #282b32; background: #111319; }
 .start-card__tabs button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 39px; border: 0; border-radius: 7px; color: #797e87; background: transparent; font-size: 13px; }
@@ -251,7 +252,8 @@ svg { flex-shrink: 0; }
 .online-label { display: flex; align-items: center; gap: 5px; margin-left: auto; color: #747a82; font-size: 9px; }
 .online-label i { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
 .room-exit { display: grid; place-items: center; width: 31px; height: 31px; padding: 0; border: 0; border-radius: 7px; color: #777c85; background: #191c22; }
-.compact-room-main { display: grid; gap: 10px; width: min(900px, calc(100% - 24px)); margin: 0 auto; padding: 12px 0 max(14px, env(safe-area-inset-bottom)); }
+.compact-room-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; width: min(900px, calc(100% - 24px)); min-width: 0; margin: 0 auto; padding: 12px 0 max(14px, env(safe-area-inset-bottom)); }
+.compact-room-main > * { min-width: 0; }
 .compact-toast { position: fixed; z-index: 10; top: 59px; left: 50%; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: max-content; max-width: calc(100% - 28px); padding: 10px 12px; transform: translateX(-50%); border: 1px solid #665742; border-radius: 8px; color: #dbc6a8; background: #28251f; box-shadow: 0 8px 30px rgba(0,0,0,.35); font-size: 11px; }
 .compact-toast button { display: grid; place-items: center; padding: 0; border: 0; color: inherit; background: transparent; }
 .god-seat { display: flex; align-items: center; gap: 11px; min-height: 57px; padding: 9px 12px; border: 1px solid #343139; border-radius: 10px; background: #19191e; }
@@ -263,6 +265,31 @@ svg { flex-shrink: 0; }
 .god-seat > button { min-height: 31px; padding: 0 11px; border: 1px solid #3b3e45; border-radius: 7px; color: #a5a5a3; background: #22252b; font-size: 10px; }
 .god-seat > button.primary { border-color: #776349; color: #e1c9a8; background: rgba(194,163,121,.1); }
 .god-seat__occupied { color: #666b73; font-size: 10px; }
+.debug-panel { min-width: 0; padding: 11px 12px; border: 1px dashed #5b513f; border-radius: 10px; background: linear-gradient(110deg, rgba(194,163,121,.07), rgba(22,25,31,.96) 42%); }
+.debug-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.debug-panel__header > div { display: flex; align-items: center; gap: 6px; }
+.debug-panel__header strong { color: #d8c2a0; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.debug-panel__header em { padding: 2px 5px; border-radius: 3px; color: #8f7a5e; background: rgba(194,163,121,.08); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; font-style: normal; }
+.debug-panel__header > span { color: #77736c; font-size: 9px; }
+.debug-panel__icon { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 6px; color: #c3a678; background: rgba(194,163,121,.1); }
+.debug-panel__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.debug-panel__actions button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 29px; padding: 0 9px; border: 1px solid #413d35; border-radius: 6px; color: #b5a68f; background: #211f1b; font-size: 9px; }
+.debug-panel__actions button:last-child { color: #998983; }
+.debug-panel__actions button:disabled { opacity: .35; }
+.debug-panel__switch-label { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 11px; }
+.debug-panel__switch-label span { color: #9d978d; font-size: 9px; }
+.debug-panel__switch-label small { color: #686b70; font-size: 8px; }
+.debug-peer-switch { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; margin-top: 6px; padding-bottom: 2px; }
+.debug-peer-switch::-webkit-scrollbar { display: none; }
+.debug-peer-switch button { display: flex; flex: 1 1 106px; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; max-width: 150px; min-height: 43px; padding: 7px 9px; border: 1px solid #30333a; border-radius: 7px; color: #a6a39c; background: #17191e; text-align: left; }
+.debug-peer-switch button.active { border-color: #8a714d; color: #ead7bb; background: rgba(194,163,121,.1); box-shadow: inset 0 0 0 1px rgba(194,163,121,.08); }
+.debug-peer-switch button strong,
+.debug-peer-switch button small { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+.debug-peer-switch button strong { font-size: 10px; font-weight: 500; }
+.debug-peer-switch button small { color: #74777d; font-size: 8px; }
+.debug-peer-switch button.active small { color: #a48e70; }
+.debug-panel__empty { margin-top: 7px; color: #6f7278; font-size: 9px; }
+.debug-panel__note { display: flex; align-items: center; gap: 4px; margin-top: 8px; color: #5f636b; font-size: 8px; }
 .room-section, .god-compact-panel, .player-role-section { padding: 12px; border: 1px solid #292c33; border-radius: 10px; background: var(--panel); }
 .room-section__heading { display: flex; align-items: center; justify-content: space-between; min-height: 24px; margin-bottom: 9px; }
 .room-section__heading > div { display: flex; align-items: center; gap: 7px; color: #a7a8a8; }
@@ -465,6 +492,9 @@ svg { flex-shrink: 0; }
   .room-topbar { gap: 8px; }
   .room-occupancy { padding: 0 7px; }
   .room-occupancy em { display: none; }
+  .debug-panel__switch-label { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .debug-peer-switch { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #4b4438 transparent; }
+  .debug-peer-switch button { flex: 0 0 104px; max-width: none; }
 }
 
 @media (max-height: 700px) {

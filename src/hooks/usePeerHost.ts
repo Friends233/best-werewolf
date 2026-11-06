@@ -29,6 +29,12 @@ import {
   saveHostSession,
   type HostRestoreData,
 } from '../utils/sessionPersist';
+import {
+  DEBUG_PEER_PREFIX,
+  isDebugPeerId,
+  nextDebugPlayerIndex,
+  type DebugParticipant,
+} from '../utils/debugMode';
 
 export function getHostPeerId(roomId: string) {
   return `best-werewolf-v1-${roomId}`;
@@ -69,6 +75,8 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
     () => restore?.preferences.find(([peerId]) => peerId === HOST_PEER_ID)?.[1] ?? null,
   );
   const [myBlockedPreselectRoleIds, setMyBlockedPreselectRoleIds] = useState<string[]>([]);
+  /** 测试玩家没有连接，预选变化后用它触发房主端重新读取。 */
+  const [, setPreferenceRevision] = useState(0);
   const roomRef = useRef(room);
   const connectionsRef = useRef(new Map<string, DataConnection>());
   const playerNamesRef = useRef(new Map<string, string>(
@@ -107,7 +115,7 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
   }, [createInfo.playerName]);
 
   const notify = useCallback((peerId: string, message: string) => {
-    if (peerId === HOST_PEER_ID) setNotice(message);
+    if (peerId === HOST_PEER_ID || isDebugPeerId(peerId)) setNotice(message);
     else {
       const connection = connectionsRef.current.get(peerId);
       if (connection?.open) connection.send({ type: 'NOTICE', message } satisfies HostMessage);
@@ -157,6 +165,68 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
     publish(withReadyStatus(nextRoom));
   }, [fillWaitingPlayers, publish]);
 
+  const addDebugPlayers = useCallback((requestedCount = 1) => {
+    const current = roomRef.current;
+    if (current.gameStatus !== 'SETUP' && current.gameStatus !== 'READY') {
+      setNotice('发牌后不能继续添加测试玩家，请先重开本局。');
+      return;
+    }
+
+    const availableSeats = current.seats.filter((seat) => seat.peerId === null).length;
+    const count = Math.min(Math.max(1, Math.floor(requestedCount)), availableSeats);
+    if (count === 0) {
+      setNotice('当前没有空座，无法添加测试玩家。');
+      return;
+    }
+
+    const startIndex = nextDebugPlayerIndex(playerNamesRef.current.keys());
+    for (let offset = 0; offset < count; offset += 1) {
+      const index = startIndex + offset;
+      playerNamesRef.current.set(`${DEBUG_PEER_PREFIX}${index}`, `测试玩家${index}`);
+    }
+    updateRoom((state) => state);
+    setNotice(`已加入 ${count} 名测试玩家。`);
+  }, [updateRoom]);
+
+  const clearDebugPlayers = useCallback((force = false) => {
+    const current = roomRef.current;
+    const activeGame = current.gameStatus === 'DEALT' || current.gameStatus === 'FINISHED';
+    if (activeGame && !force) {
+      setNotice('发牌后不能单独移除测试玩家，请先重开本局。');
+      return;
+    }
+
+    const debugPeerIds = new Set<string>();
+    playerNamesRef.current.forEach((_, peerId) => {
+      if (isDebugPeerId(peerId)) debugPeerIds.add(peerId);
+    });
+    current.seats.forEach((seat) => {
+      if (isDebugPeerId(seat.peerId)) debugPeerIds.add(seat.peerId);
+    });
+    if (isDebugPeerId(current.godPeerId)) debugPeerIds.add(current.godPeerId);
+    if (debugPeerIds.size === 0) return;
+
+    debugPeerIds.forEach((peerId) => {
+      playerNamesRef.current.delete(peerId);
+      preferencesRef.current.delete(peerId);
+      preselectHistoryRef.current.delete(peerId);
+    });
+    updateRoom((state) => ({
+      ...state,
+      gameStatus: activeGame ? 'SETUP' : state.gameStatus,
+      godPeerId: isDebugPeerId(state.godPeerId) ? null : state.godPeerId,
+      godName: isDebugPeerId(state.godPeerId) ? '' : state.godName,
+      seats: state.seats.map((seat) => {
+        if (isDebugPeerId(seat.peerId)) {
+          return { ...seat, peerId: null, playerName: '', roleId: null, status: 'ALIVE', tags: [] };
+        }
+        if (!activeGame) return seat;
+        return { ...seat, roleId: null, status: 'ALIVE', tags: [] };
+      }),
+    }));
+    setNotice(activeGame ? '已清理测试玩家并重置本局。' : '已清理测试玩家。');
+  }, [updateRoom]);
+
   const getBlockedForPeer = useCallback((peerId: string, cooldownRounds = roomRef.current.preselectCooldownRounds) => (
     getBlockedPreselectRoles(preselectHistoryRef.current.get(peerId), cooldownRounds)
   ), []);
@@ -169,6 +239,7 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
     } else {
       sendToPeer(peerId, { type: 'SYNC_MY_PRESELECT', roleId, blockedRoleIds });
     }
+    setPreferenceRevision((revision) => revision + 1);
     persistHostState();
   }, [getBlockedForPeer, persistHostState, sendToPeer]);
 
@@ -629,10 +700,33 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
     };
   }, [sendToPeer, syncPreselect, updateRoom]);
 
-  const send = useCallback((message: ClientMessage) => {
+  const sendAs = useCallback((peerId: string, message: ClientMessage) => {
     setNotice('');
-    messageHandlerRef.current(HOST_PEER_ID, message);
+    messageHandlerRef.current(peerId, message);
   }, []);
+
+  const send = useCallback((message: ClientMessage) => {
+    sendAs(HOST_PEER_ID, message);
+  }, [sendAs]);
+
+  const debugPlayers: DebugParticipant[] = Array.from(playerNamesRef.current.entries())
+    .filter(([peerId]) => isDebugPeerId(peerId))
+    .map(([peerId, playerName]) => {
+      const seat = room.seats.find((item) => item.peerId === peerId);
+      return {
+        peerId,
+        playerName,
+        seatNumber: seat?.seatNumber ?? null,
+        roleId: seat?.roleId ?? null,
+        isGod: room.godPeerId === peerId,
+      };
+    })
+    .sort((left, right) => (left.seatNumber ?? 99) - (right.seatNumber ?? 99));
+
+  const getPreselectFor = (peerId: string) => ({
+    roleId: preferencesRef.current.get(peerId) ?? null,
+    blockedRoleIds: getBlockedForPeer(peerId),
+  });
 
   return {
     room,
@@ -645,5 +739,10 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
     notice,
     setNotice,
     send,
+    sendAs,
+    debugPlayers,
+    getPreselectFor,
+    addDebugPlayers,
+    clearDebugPlayers,
   };
 }

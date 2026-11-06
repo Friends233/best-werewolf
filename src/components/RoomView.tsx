@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Check,
@@ -42,6 +42,7 @@ interface RoomViewProps {
   onNoticeClose: () => void;
   onSend: (message: ClientMessage) => void;
   onExit: () => void;
+  debugPanel?: ReactNode;
 }
 
 const STATUS_OPTIONS: { value: PlayerStatus; label: string; icon: typeof Heart }[] = [
@@ -146,6 +147,7 @@ export function RoomView({
   onNoticeClose,
   onSend,
   onExit,
+  debugPanel,
 }: RoomViewProps) {
   const [revealed, setRevealed] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -207,6 +209,8 @@ export function RoomView({
               <button type="button" className="primary" onClick={() => onSend({ type: 'CLAIM_GOD' })}>坐上去</button>
             ) : <span className="god-seat__occupied">已就位</span>}
           </section>
+
+          {debugPanel}
 
           {dealt ? (
             isGod ? (

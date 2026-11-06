@@ -7,11 +7,12 @@ import { RoleEditor } from './RoleEditor';
 
 interface LandingProps {
   initialRoomId: string;
+  debugEnabled?: boolean;
   onCreate: (info: CreateInfo) => void;
   onJoin: (info: JoinInfo) => void;
 }
 
-export function Landing({ initialRoomId, onCreate, onJoin }: LandingProps) {
+export function Landing({ initialRoomId, debugEnabled = false, onCreate, onJoin }: LandingProps) {
   const [tab, setTab] = useState<'create' | 'join'>(initialRoomId ? 'join' : 'create');
   const [roomId, setRoomId] = useState(initialRoomId);
   const [playerName, setPlayerName] = useState('');
@@ -65,7 +66,11 @@ export function Landing({ initialRoomId, onCreate, onJoin }: LandingProps) {
 
   return (
     <div className="simple-landing">
-      <header className="simple-brand"><Moon size={20} fill="currentColor" /><strong>最好的狼人杀</strong></header>
+      <header className="simple-brand">
+        <Moon size={20} fill="currentColor" />
+        <strong>最好的狼人杀</strong>
+        {debugEnabled && <span className="debug-mode-badge">测试模式</span>}
+      </header>
       <main className="start-card">
         <div className="start-card__tabs">
           <button type="button" className={tab === 'create' ? 'active' : ''} onClick={() => { setTab('create'); setError(''); }}><Plus size={15} />创建房间</button>
