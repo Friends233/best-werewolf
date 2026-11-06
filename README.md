@@ -2,6 +2,8 @@
 
 一个面向线下狼人杀场景的轻量辅助工具。项目通过 PeerJS/WebRTC 建立点对点连接，集中完成房间创建、自由排座、私密发牌和上帝记牌，不自动执行角色技能或胜负判定。
 
+在线体验：[https://friends233.github.io/best-werewolf/](https://friends233.github.io/best-werewolf/)
+
 ## 主要功能
 
 - 使用四位房间码加入房间，也可以通过二维码分享邀请链接。
