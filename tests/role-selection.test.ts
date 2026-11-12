@@ -3,7 +3,12 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { ROLE_ORDER, ROLE_REGISTRY } from '../src/config/roles.ts';
 import type { SeatState } from '../src/types/protocol.ts';
-import { assignRolesWithPreferences } from '../src/utils/game.ts';
+import {
+  assignRolesWithPreferences,
+  changeRoleSelection,
+  createSeats,
+  removeRoleSelection,
+} from '../src/utils/game.ts';
 
 const DEAL_COUNT = 100;
 const ROLE_POOL = [...ROLE_ORDER];
@@ -90,4 +95,31 @@ test('100 局全身份发牌统计', () => {
 
   console.log(`\n9 个身份各 1 张，完整发牌 ${DEAL_COUNT} 局，各座位身份分布：`);
   console.table(report);
+});
+
+test('身份牌可逐张减少到 0，不受最少人数和狼人数量限制', () => {
+  let roles = ['werewolf', 'werewolf', 'villager', 'villager', 'seer', 'witch'];
+  const removals = [...roles];
+
+  for (const roleId of removals) {
+    roles = changeRoleSelection(roles, roleId, -1)!;
+  }
+
+  assert.deepEqual(roles, []);
+  assert.equal(createSeats(roles.length).length, 0);
+});
+
+test('减少到低位后仍可重新增加身份牌', () => {
+  const roles = ['villager', 'seer', 'witch'];
+  const withWolf = changeRoleSelection(roles, 'werewolf', 1);
+  const withAnotherWolf = changeRoleSelection(withWolf!, 'werewolf', 1);
+
+  assert.deepEqual(withWolf, ['villager', 'seer', 'witch', 'werewolf']);
+  assert.deepEqual(withAnotherWolf, ['villager', 'seer', 'witch', 'werewolf', 'werewolf']);
+});
+
+test('删除自定义身份会移除其全部牌位，并可低于 4 人', () => {
+  const roles = ['villager', 'custom_test', 'custom_test', 'seer'];
+
+  assert.deepEqual(removeRoleSelection(roles, 'custom_test'), ['villager', 'seer']);
 });

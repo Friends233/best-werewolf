@@ -254,7 +254,7 @@ export function RoomView({
                 <div className="room-section__heading">
                   <div><strong>玩家座位</strong><span>{occupiedCount} 人已入座 · 共 {room.totalSeats} 位</span></div>
                   {mySeat && !isGod && <small>自动分配到 {mySeat.seatNumber} 号位，可点空位调整</small>}
-                  {!mySeat && !isGod && <small>房间已满，等待自动补位</small>}
+                  {!mySeat && !isGod && <small>座位已调整，等待空位或上帝增加身份</small>}
                   {isGod && <small>点两个座位可调位</small>}
                 </div>
                 <SeatGrid
@@ -299,9 +299,13 @@ export function RoomView({
                   type="button"
                   disabled={room.gameStatus !== 'READY'}
                   onClick={() => onSend({ type: 'DEAL_CARDS' })}
-                >{room.gameStatus === 'READY' ? '确认发牌' : `还差 ${room.totalSeats - occupiedCount} 位玩家`}</button>
+                >{room.gameStatus === 'READY'
+                  ? '确认发牌'
+                  : room.totalSeats === 0
+                    ? '请先添加身份牌'
+                    : `还差 ${room.totalSeats - occupiedCount} 位玩家`}</button>
               ) : (
-                <div className="waiting-action"><LoaderCircle className={room.godPeerId && mySeat ? 'spin' : ''} size={15} />{!mySeat ? '房间已满，上帝加牌后将自动入座' : room.godPeerId ? (room.preselectEnabled ? (myPreselectRoleId ? '已预选，等待上帝发牌' : '可预选身份，或等待上帝发牌') : '等待上帝发牌') : '等待有人坐上上帝位'}</div>
+                <div className="waiting-action"><LoaderCircle className={room.godPeerId && mySeat ? 'spin' : ''} size={15} />{!mySeat ? '座位已调整，上帝加牌后将自动入座' : room.godPeerId ? (room.preselectEnabled ? (myPreselectRoleId ? '已预选，等待上帝发牌' : '可预选身份，或等待上帝发牌') : '等待上帝发牌') : '等待有人坐上上帝位'}</div>
               )}
             </>
           )}

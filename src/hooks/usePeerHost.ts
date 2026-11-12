@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
-import { isCustomRoleId, isUniqueRole, resolveRole, stripRoleImages } from '../config/roles';
+import { isCustomRoleId, resolveRole, stripRoleImages } from '../config/roles';
 import type {
   ClientMessage,
   CreateInfo,
@@ -13,6 +13,7 @@ import type {
 } from '../types/protocol';
 import {
   assignRolesWithPreferences,
+  changeRoleSelection,
   createRoom,
   createRoomCode,
   createSeats,
@@ -21,8 +22,10 @@ import {
   HOST_PEER_ID,
   MAX_CUSTOM_ROLES,
   MAX_PRESELECT_COOLDOWN,
+  MAX_ROLES,
   MIN_PRESELECT_COOLDOWN,
   recordPreselectRound,
+  removeRoleSelection,
 } from '../utils/game';
 import {
   mapToEntries,
@@ -55,6 +58,7 @@ export function toPublicRoom(room: RoomState): PublicRoomState {
 function withReadyStatus(room: RoomState): RoomState {
   if (room.gameStatus !== 'SETUP' && room.gameStatus !== 'READY') return room;
   const ready =
+    room.totalSeats > 0 &&
     room.selectedRoleIds.length === room.totalSeats &&
     getOccupiedSeats(room).length === room.totalSeats;
   return { ...room, gameStatus: ready ? 'READY' : 'SETUP' };
@@ -416,23 +420,19 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
     if (message.type === 'CHANGE_ROLE_COUNT') {
       if (current.gameStatus === 'DEALT' || current.gameStatus === 'FINISHED') return;
       const { roleId, delta } = message;
-      if (!resolveRole(roleId, current.customRoles) || (delta !== 1 && delta !== -1)) return;
-      const count = current.selectedRoleIds.filter((id) => id === roleId).length;
-      const unique = isUniqueRole(roleId);
-      if (delta > 0 && unique && count >= 1) return;
-      if (delta < 0 && count <= (roleId === 'werewolf' ? 1 : 0)) return;
-      const nextTotal = current.totalSeats + delta;
-      if (nextTotal < 4 || nextTotal > 12) {
-        notify(peerId, '当前支持 4–12 人游戏。');
+      const selectedRoleIds = changeRoleSelection(
+        current.selectedRoleIds,
+        roleId,
+        delta,
+        current.customRoles,
+      );
+      if (!selectedRoleIds) {
+        if (delta > 0 && current.selectedRoleIds.length >= MAX_ROLES) {
+          notify(peerId, `最多支持 ${MAX_ROLES} 张身份牌。`);
+        }
         return;
       }
-      if (delta < 0 && current.seats[current.totalSeats - 1]?.peerId !== null) {
-        notify(peerId, '请先让末位玩家离座，再减少人数。');
-        return;
-      }
-      const selectedRoleIds = [...current.selectedRoleIds];
-      if (delta > 0) selectedRoleIds.push(roleId);
-      else selectedRoleIds.splice(selectedRoleIds.lastIndexOf(roleId), 1);
+      const nextTotal = selectedRoleIds.length;
       updateRoom((state) => ({
         ...state,
         totalSeats: nextTotal,
@@ -452,8 +452,8 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
         return;
       }
       if (current.customRoles.some((item) => item.id === role.id)) return;
-      if (current.totalSeats >= 12) {
-        notify(peerId, '当前支持 4–12 人游戏。');
+      if (current.totalSeats >= MAX_ROLES) {
+        notify(peerId, `最多支持 ${MAX_ROLES} 张身份牌。`);
         return;
       }
       updateRoom((state) => {
@@ -479,24 +479,9 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
       if (current.gameStatus === 'DEALT' || current.gameStatus === 'FINISHED') return;
       const { roleId } = message;
       if (!isCustomRoleId(roleId) || !current.customRoles.some((role) => role.id === roleId)) return;
-      const removedCount = current.selectedRoleIds.filter((id) => id === roleId).length;
-      const nextTotal = current.totalSeats - removedCount;
-      if (nextTotal < 4) {
-        notify(peerId, '删除后人数不能少于 4 人，请先调整其他身份。');
-        return;
-      }
-      if (removedCount > 0) {
-        for (let index = 0; index < removedCount; index += 1) {
-          const seat = current.seats[current.totalSeats - 1 - index];
-          if (seat?.peerId !== null) {
-            notify(peerId, '请先让末位玩家离座，再删除该身份。');
-            return;
-          }
-        }
-      }
-      const nextSelected = current.selectedRoleIds.filter((id) => id !== roleId);
+      const nextSelected = removeRoleSelection(current.selectedRoleIds, roleId);
       updateRoom((state) => {
-        const selectedRoleIds = state.selectedRoleIds.filter((id) => id !== roleId);
+        const selectedRoleIds = removeRoleSelection(state.selectedRoleIds, roleId);
         const totalSeats = selectedRoleIds.length;
         return {
           ...state,
@@ -527,6 +512,10 @@ export function usePeerHost(createInfo: CreateInfo, restore?: HostRestoreData) {
 
     if (message.type === 'DEAL_CARDS') {
       if (current.gameStatus === 'DEALT') return;
+      if (current.totalSeats === 0) {
+        notify(peerId, '请先添加至少 1 张身份牌。');
+        return;
+      }
       if (getOccupiedSeats(current).length !== current.totalSeats) {
         notify(peerId, '所有玩家入座后才能发牌。');
         return;

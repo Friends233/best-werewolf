@@ -8,7 +8,7 @@ import {
   ROLE_REGISTRY,
   type RoleDefinition,
 } from '../config/roles';
-import { MAX_CUSTOM_ROLES } from '../utils/game';
+import { MAX_CUSTOM_ROLES, MAX_ROLES } from '../utils/game';
 import { compressRoleImage } from '../utils/image';
 
 interface RoleEditorProps {
@@ -70,8 +70,8 @@ export function RoleEditor({
       setFormError(`最多添加 ${MAX_CUSTOM_ROLES} 个自定义身份。`);
       return;
     }
-    if (selectedRoleIds.length >= 12) {
-      setFormError('当前支持 4–12 人游戏。');
+    if (selectedRoleIds.length >= MAX_ROLES) {
+      setFormError(`最多支持 ${MAX_ROLES} 张身份牌。`);
       return;
     }
     onAddCustom?.(createCustomRole(name, draftPreview));
@@ -82,7 +82,7 @@ export function RoleEditor({
     <div className="role-editor">
       <div className="role-editor__heading">
         <span>身份牌</span>
-        <strong>{selectedRoleIds.length} 人局</strong>
+        <strong>{selectedRoleIds.length} 张身份牌</strong>
       </div>
       <div className="role-editor__grid">
         {roleIds.map((roleId) => {
@@ -109,14 +109,14 @@ export function RoleEditor({
                   <button
                     type="button"
                     aria-label={`减少${role.name}`}
-                    disabled={count <= (roleId === 'werewolf' ? 1 : 0) || selectedRoleIds.length <= 4}
+                    disabled={count <= 0}
                     onClick={() => onChange?.(roleId, -1)}
                   ><Minus size={12} /></button>
                   <strong>{count}</strong>
                   <button
                     type="button"
                     aria-label={`增加${role.name}`}
-                    disabled={(unique && count >= 1) || selectedRoleIds.length >= 12}
+                    disabled={(unique && count >= 1) || selectedRoleIds.length >= MAX_ROLES}
                     onClick={() => onChange?.(roleId, 1)}
                   ><Plus size={12} /></button>
                 </div>
@@ -132,7 +132,7 @@ export function RoleEditor({
             <button
               type="button"
               className="role-editor__add"
-              disabled={customRoles.length >= MAX_CUSTOM_ROLES || selectedRoleIds.length >= 12}
+              disabled={customRoles.length >= MAX_CUSTOM_ROLES || selectedRoleIds.length >= MAX_ROLES}
               onClick={() => setShowForm(true)}
             ><Plus size={13} />自定义身份</button>
           ) : (

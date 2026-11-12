@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowRight, KeyRound, Moon, Plus, UserRound } from 'lucide-react';
 import type { RoleDefinition } from '../config/roles';
 import type { CreateInfo, JoinInfo } from '../types/protocol';
-import { DEFAULT_ROLES } from '../utils/game';
+import { changeRoleSelection, DEFAULT_ROLES, removeRoleSelection } from '../utils/game';
 import { RoleEditor } from './RoleEditor';
 
 interface LandingProps {
@@ -21,12 +21,7 @@ export function Landing({ initialRoomId, debugEnabled = false, onCreate, onJoin 
   const [error, setError] = useState('');
 
   const changeRole = (roleId: string, delta: number) => {
-    setRoles((current) => {
-      const next = [...current];
-      if (delta > 0) next.push(roleId);
-      else next.splice(next.lastIndexOf(roleId), 1);
-      return next;
-    });
+    setRoles((current) => changeRoleSelection(current, roleId, delta, customRoles) ?? current);
     setError('');
   };
 
@@ -37,13 +32,8 @@ export function Landing({ initialRoomId, debugEnabled = false, onCreate, onJoin 
   };
 
   const removeCustomRole = (roleId: string) => {
-    const nextRoles = roles.filter((id) => id !== roleId);
-    if (nextRoles.length < 4) {
-      setError('删除后人数不能少于 4 人，请先调整其他身份。');
-      return;
-    }
     setCustomRoles((current) => current.filter((role) => role.id !== roleId));
-    setRoles(nextRoles);
+    setRoles((current) => removeRoleSelection(current, roleId));
     setError('');
   };
 
@@ -118,10 +108,6 @@ export function Landing({ initialRoomId, debugEnabled = false, onCreate, onJoin 
             onClick={() => {
               if (!validName()) return;
               if (tab === 'create') {
-                if (roles.length < 4) {
-                  setError('至少需要 4 张身份牌。');
-                  return;
-                }
                 onCreate({
                   playerName: playerName.trim().slice(0, 12),
                   selectedRoleIds: roles,

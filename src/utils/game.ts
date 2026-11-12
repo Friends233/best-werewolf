@@ -1,9 +1,14 @@
-import type { RoleDefinition } from '../config/roles';
+import {
+  isUniqueRole,
+  resolveRole,
+  type RoleDefinition,
+} from '../config/roles.ts';
 import type { RoomState, SeatState } from '../types/protocol';
 
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const HOST_PEER_ID = 'host';
 export const DEFAULT_ROLES = ['werewolf', 'werewolf', 'villager', 'villager', 'seer', 'witch'];
+export const MAX_ROLES = 12;
 export const MAX_CUSTOM_ROLES = 6;
 export const DEFAULT_PRESELECT_ENABLED = true;
 export const DEFAULT_PRESELECT_COOLDOWN = 3;
@@ -32,6 +37,33 @@ export function createSeats(totalSeats: number, previous: SeatState[] = []) {
       tags: [],
     };
   });
+}
+
+/**
+ * 调整身份牌数量。减少身份只受当前数量约束，不强制最少人数或狼人数量；
+ * 因座位数跟随身份牌数量变化，暂时超出的玩家会保留在等待队列中。
+ */
+export function changeRoleSelection(
+  selectedRoleIds: string[],
+  roleId: string,
+  delta: number,
+  customRoles: RoleDefinition[] = [],
+): string[] | null {
+  if ((delta !== 1 && delta !== -1) || !resolveRole(roleId, customRoles)) return null;
+  const count = selectedRoleIds.filter((id) => id === roleId).length;
+  if (delta < 0 && count === 0) return null;
+  if (delta > 0 && isUniqueRole(roleId) && count >= 1) return null;
+  if (delta > 0 && selectedRoleIds.length >= MAX_ROLES) return null;
+
+  const next = [...selectedRoleIds];
+  if (delta > 0) next.push(roleId);
+  else next.splice(next.lastIndexOf(roleId), 1);
+  return next;
+}
+
+/** 删除身份时同时移除其全部牌位，不设最低人数限制。 */
+export function removeRoleSelection(selectedRoleIds: string[], roleId: string): string[] {
+  return selectedRoleIds.filter((id) => id !== roleId);
 }
 
 export function createRoom(
